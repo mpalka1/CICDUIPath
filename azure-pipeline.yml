@@ -1,0 +1,47 @@
+trigger:
+- master
+
+variables:
+  - name: vmImage
+    value: 'ubuntu-latest'
+
+stages:
+  - stage: Build
+    displayName: Build stage
+    jobs:
+    - job: BuildJob
+      pool:
+        vmImage: $(vmImage)
+      steps:
+      - template: Jobs/build.yml
+ 
+  - stage: NonProd
+    displayName: Deploy non prod stage
+    jobs:
+    - deployment: DeploymentJob1
+      pool:
+        vmImage: $(vmImage)
+      environment: non-prod
+      variables:
+        - template: Variables/non-prod.yml
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - template: Jobs/deploy.yml
+
+  - stage: Prod
+    displayName: Deploy prod stage
+    jobs:
+    - deployment: DeploymentJob2
+      pool:
+        vmImage: $(vmImage)
+      environment: prod
+      variables:
+        - template: Variables/prod.yml
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - template: Jobs/deploy.yml
+    
