@@ -1,50 +1,73 @@
-# Copy this file to you project's root directory (containing the project.json)
-# then update the variables and paths trigger as a appropriate.
-#
-# The resouces section points to the repository containing the pipeline templates. This is set to UiPath's repository.
-# DO NOT use the UiPath template repository for anything other than testing. It may change without notice.
-# Please fork/replicate this repository to host it yourself and make any required modifications.
-
-variables:
-  # The full path to the folder containing the project.json file for this pipeline
-  projectPath: MyProject
-  # The name of the folder to deploy the package to.
-  folderName: Default
-  # Either AutoVersion to generate a build number or CurrentVersion to match the project.json version.
-  versioningStrategy: '0.1.$(Build.BuildID)'
-  # The orchestrator tenant to deploy to. Not used, but may be useful if deploying to multiple tenants.
-  tenant: Default
-  # The environments to update the package version to the deployed version. 
-  # Not required for modern folders or if you do not want to update the package version.
-  environments: ''
-
-# Update this trigger to specify when the pipeline should run.
-# Variables cannot be used here.
+  
 trigger:
-  # Define what branches trigger the pipeline
-  branches:
-    include:
-      - master    # Will push to Prod after approval
-      - release*  # Will push to Test without approval
-  # Define what paths to include for building this pipeline. Normally, you should add the same projectPath as above,
-  # so that any change to the project will trigger the pipeline, but it will ignore any changes to other projects.
-  paths:
-    include:
-      - MyProject/*  # Update this
+  - master
+variables:
+  - group: uipath-cicd
+  - name: agent.preferPowerShellOnContainers
+    value: "True"
 
-# This points to the repository containing the templates. Update this to point to your template repository.
-resources:
-  repositories:
-    - repository: templates
-      type: github  # use 'git' for a repo hosted in Azure DevOps
-      endpoint: mpalka1
-      name: mpalka1/CICDUIPath
+stages:
+  - stage: Build
+    displayName: Create build artifact
+    jobs:
+      - job: BuildArtifact
+        pool:
+          vmImage: "windows-latest"
+        container:
+          image: uipathrobot.azurecr.io/uipathrobot:latest
+          endpoint: robot-container-registry
 
-# Use the specified template. 
-extends:
-  template: project-pipeline-template.yaml@templates  # Template reference
-  parameters:
-    projectPath: $(projectPath)
-    folderName: $(folderName)
-    versioningStrategy: $(versioningStrategy)
-    environments: $(environments)
+        steps:
+          - script: C:\UiPath\UiRobot.exe pack $(Build.SourcesDirectory)\project.json -o $(Build.ArtifactStagingDirectory)\ -v 1.0.$(Build.BuildNumber)
+            displayName: "Build the artifact"
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: drop
+
+  - stage: DeployUat
+    displayName: Deploy build artifact to UAT
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: deployUat
+        displayName: Deploy package to UAT Orchestrator
+        pool:
+          vmImage: "windows-latest"
+        container:
+          image: uipathrobot.azurecr.io/uipathrobot:latest
+          endpoint: robot-container-registry
+        environment: uat
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop
+                  displayName: Download build artifact on build agent
+                - powershell: |
+                    Import-Module UiPath.Powershell
+                    $token = Get-UiPathAuthToken -ClientId $(uatClientId) -UserKey $(uatUserKey) -AccountName $(uatAccountName) -CloudDeployment 'Production' -TenantName $(uatTenantName)
+                    Add-UiPathPackage -PackageFile $(Pipeline.Workspace)\drop\uipath-sample.1.0.$(Build.BuildNumber).nupkg -AuthToken $token
+  - stage: DeployProd
+    displayName: Deploy build artifact to Prod
+    dependsOn: DeployUat
+    condition: succeeded()
+    jobs:
+      - deployment: deployProd
+        displayName: Deploy package to Prod Orchestrator
+        pool:
+          vmImage: "windows-latest"
+        container:
+          image: uipathrobot.azurecr.io/uipathrobot:latest
+          endpoint: robot-container-registry
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop
+                  displayName: Download build artifact on build agent
+                - powershell: |
+                    Import-Module UiPath.Powershell
+                    $token = Get-UiPathAuthToken -ClientId $(prodClientId) -UserKey $(prodUserKey) -AccountName $(prodAccountName) -CloudDeployment 'Production' -TenantName $(prodTenantName)
+                    Add-UiPathPackage -PackageFile $(Pipeline.Workspace)\drop\uipath-sample.1.0.$(Build.BuildNumber).nupkg -AuthToken $token
