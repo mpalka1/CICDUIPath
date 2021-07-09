@@ -56,7 +56,7 @@ stages:
                 - powershell: |
                     $packages = Get-ChildItem -Path $(Pipeline.Workspace)\drop\*.nupkg -Exclude *.Activities.*
                     $activities = Get-ChildItem -Path $(Pipeline.Workspace)\drop\*.Activities.*.nupkg
-                    Get-UiPathAuthToken -URL "$(dev-orchURL)" -Username "$(dev-userName)" -Password "$(dev-password)" -FolderPath "$(dev-orchFolder)" -Session
+                    Get-UiPathAuthToken -URL "$(dev-orchURL)" -Username "$(dev-userName)" -Password "$(dev-password)" -FolderPath "$(dev-orchFolder)" -Session -Verbose
                     Write-Output Packages...
                     Write-Output ( $packages | Select-Object FullName )
                     Write-Output Libraries...
