@@ -1,102 +1,50 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+# Copy this file to you project's root directory (containing the project.json)
+# then update the variables and paths trigger as a appropriate.
+#
+# The resouces section points to the repository containing the pipeline templates. This is set to UiPath's repository.
+# DO NOT use the UiPath template repository for anything other than testing. It may change without notice.
+# Please fork/replicate this repository to host it yourself and make any required modifications.
 
-trigger:
-  - master
 variables:
-  - group: DEV
+  # The full path to the folder containing the project.json file for this pipeline
+  projectPath: MyProject
+  # The name of the folder to deploy the package to.
+  folderName: Default
+  # Either AutoVersion to generate a build number or CurrentVersion to match the project.json version.
+  versioningStrategy: '0.1.$(Build.BuildID)'
+  # The orchestrator tenant to deploy to. Not used, but may be useful if deploying to multiple tenants.
+  tenant: Default
+  # The environments to update the package version to the deployed version. 
+  # Not required for modern folders or if you do not want to update the package version.
+  environments: ''
 
-stages:
-  - stage: Build
-    displayName: Build Package
-    jobs: 
-    - job: BuildPackage
-      pool: MPTest
-      steps:    
-      - task: UiPathPack@2
-        inputs:
-          versionType: 'AutoVersion'
-          projectJsonPath: '$(Build.SourcesDirectory)\project.json'
-          outputType: 'Process'
-          orchestratorConnection: 'UiPath DEV'
-          outputPath: '$(Build.ArtifactStagingDirectory)'
-      - publish: $(Build.ArtifactStagingDirectory)
-        artifact: drop
+# Update this trigger to specify when the pipeline should run.
+# Variables cannot be used here.
+trigger:
+  # Define what branches trigger the pipeline
+  branches:
+    include:
+      - master    # Will push to Prod after approval
+      - release*  # Will push to Test without approval
+  # Define what paths to include for building this pipeline. Normally, you should add the same projectPath as above,
+  # so that any change to the project will trigger the pipeline, but it will ignore any changes to other projects.
+  paths:
+    include:
+      - MyProject/CICDUIPath-main  # Update this
 
-  - stage: Assest
-    displayName: Create Assests
-    jobs:
-      - job: CreateAssests
-        pool: MPTest
-        steps:
-        - task: UiPathAssets@2
-          inputs:
-            orchestratorConnection: 'UiPath DEV'
-            folderName: 'Shared'
-            assetActionType: 'Deploy'
-            csvFile: '$(Build.SourcesDirectory)\Data\Assests.csv'
+# This points to the repository containing the templates. Update this to point to your template repository.
+resources:
+  repositories:
+    - repository: templates
+      type: github  # use 'git' for a repo hosted in Azure DevOps
+      endpoint: my-github-service-connection
+      name: mpalka1/CICDUIPath
 
-  - stage: DeployDEV
-    displayName: Deploy build artifact to DEV
-    dependsOn: Build
-    condition: succeeded()
-    jobs:
-      - deployment: deployDEV
-        displayName: Deploy package to DEV Orchestrator
-        pool: MPTest
-        environment: DEV
-        strategy:
-         runOnce:
-          deploy:
-           steps:
-            - task: UiPathDeploy@2
-              inputs:
-                orchestratorConnection: 'UiPath DEV'
-                packagesPath: '$(Pipeline.Workspace)\drop\'
-                folderName: 'Shared'
-                
-  - stage: WorkflowAnalyser
-    displayName: RunWorkflow Analyser
-    dependsOn: Build
-    condition: succeeded()
-    jobs:
-        - job: WorkflowAnalyser
-          displayName: AnalyseProject Using Workflow Cli
-          pool: MPTest
-          steps:
-          - task: PowerShell@2
-            inputs:
-              targetType: filePath
-              filePath: $(Build.SourcesDirectory)\Data\Workflow-Analyzer-CLI-Script
-              arguments: > # Use this to avoid newline characters in multiline string
-                -ProjectFilePath $(Build.SourcesDirectory)\project.json
-                -ExecutableFilePath "C:\Users\prasa\AppData\Local\UiPath\app-21.4.4\UiPath.Studio.CommandLine.exe"
-                -OutputFilePath '$(Pipeline.Workspace)\drop\Workflow-Analysis.json'
-              workingDirectory: $(Build.SourcesDirectory)
-            displayName: 'Analyse Project'
-
-  - stage : CodeQuality
-    displayName: Check Code Analysis
-    dependsOn: Build
-    condition: succeeded()
-    jobs:
-      - job : CodeQuality
-
-  - stage: TestDEV
-    displayName:  Test After Publish
-    dependsOn: DeployDEV
-    condition: succeeded()
-    jobs:
-      - job: TestDEV
-        pool: MPTest
-        steps:
-          - task: UiPathTest@2
-            inputs:
-              testTarget: 'TestSet'
-              orchestratorConnection: 'UiPATH PROD'
-              testSet: 'UiPathAzureDevOps_Tests'
-              folderName: 'Shared'
-              testReportDestination: '$(Pipeline.Workspace)\drop\'
-
+# Use the specified template. 
+extends:
+  template: project-pipeline-template.yaml@templates  # Template reference
+  parameters:
+    projectPath: $(projectPath)
+    folderName: $(folderName)
+    versioningStrategy: $(versioningStrategy)
+    environments: $(environments)
