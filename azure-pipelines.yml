@@ -30,7 +30,7 @@ trigger:
   # so that any change to the project will trigger the pipeline, but it will ignore any changes to other projects.
   paths:
     include:
-      - MyProject/mpalka1/CICDUIPath  # Update this
+      - MyProject/*  # Update this
 
 # This points to the repository containing the templates. Update this to point to your template repository.
 resources:
