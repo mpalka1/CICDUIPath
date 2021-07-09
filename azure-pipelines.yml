@@ -22,7 +22,7 @@ stages:
               versionType: 'ManualVersion'
               version: '0.1.$(Build.BuildID)'
               projectJsonPath: '.\'
-              orchestratorConnection: 'DEV'
+              orchestratorConnection: 'DEVUIPATH'
               outputPath: '$(Build.ArtifactStagingDirectory)'
             displayName: Pack processes
 
